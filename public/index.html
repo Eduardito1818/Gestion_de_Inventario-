@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario Electrónico</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Gestión de Inventario</h2>
+            <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseForm">
+                Añadir Producto
+            </button>
+        </div>
+
+        <div class="collapse mb-4" id="collapseForm">
+            <div class="card card-body shadow-sm">
+                <h5 id="titulo-form">Registrar Nuevo Producto</h5>
+                <form id="formulario-producto" class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" id="nombre" class="form-control" placeholder="Ej: Monitor LED" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Precio (S/)</label>
+                        <input type="number" step="0.01" id="precio" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Stock</label>
+                        <input type="number" id="stock" class="form-control" placeholder="0" required>
+                    </div>
+                    <div class="col-12 mt-3 text-end">
+                        <button type="button" class="btn btn-secondary me-2" onclick="resetearFormulario()">Cancelar</button>
+                        <button type="submit" class="btn btn-success" id="btn-submit">Guardar en Base de Datos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow">
+            <div class="card-body">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-productos"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let editandoId = null; 
+
+        // 1. Cargar productos
+        async function cargarProductos() {
+            const respuesta = await fetch('/productos');
+            const productos = await respuesta.json();
+            const tabla = document.getElementById('tabla-productos');
+            
+            tabla.innerHTML = ''; 
+            
+            productos.forEach(p => {
+                const fila = document.createElement('tr');
+                fila.innerHTML = `
+                    <td>${p.id}</td>
+                    <td>${p.nombre}</td>
+                    <td>S/ ${parseFloat(p.precio).toFixed(2)}</td>
+                    <td>${p.stock}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm btn-editar" 
+                            data-id="${p.id}" 
+                            data-nombre="${p.nombre}" 
+                            data-precio="${p.precio}" 
+                            data-stock="${p.stock}">
+                            Editar
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="eliminarProducto('${p.id}')">
+                            Eliminar
+                        </button>
+                    </td>
+                `;
+                tabla.appendChild(fila);
+            });
+
+            document.querySelectorAll('.btn-editar').forEach(boton => {
+                boton.onclick = () => {
+                    const d = boton.dataset;
+                    prepararEdicion(d.id, d.nombre, d.precio, d.stock);
+                };
+            });
+        }
+
+        // 2. Preparar Edición
+        function prepararEdicion(id, nombre, precio, stock) {
+            editandoId = id;
+            document.getElementById('nombre').value = nombre;
+            document.getElementById('precio').value = precio;
+            document.getElementById('stock').value = stock;
+            
+            document.getElementById('titulo-form').innerText = "Editando: " + nombre;
+            document.getElementById('btn-submit').innerText = "Actualizar Cambios";
+            document.getElementById('btn-submit').className = "btn btn-warning";
+            
+            const formCollapse = document.getElementById('collapseForm');
+            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(formCollapse);
+            bsCollapse.show();
+            
+            formCollapse.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 3. Resetear Formulario
+        function resetearFormulario() {
+            editandoId = null;
+            document.getElementById('formulario-producto').reset();
+            document.getElementById('titulo-form').innerText = "Registrar Nuevo Producto";
+            document.getElementById('btn-submit').innerText = "Guardar en Base de Datos";
+            document.getElementById('btn-submit').className = "btn btn-success";
+            
+            const formCollapse = document.getElementById('collapseForm');
+            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(formCollapse);
+            bsCollapse.hide();
+        }
+
+        // 4. Guardar o Actualizar
+        document.getElementById('formulario-producto').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const datos = {
+                nombre: document.getElementById('nombre').value,
+                precio: parseFloat(document.getElementById('precio').value),
+                stock: parseInt(document.getElementById('stock').value)
+            };
+
+            const url = editandoId ? `/productos/${editandoId}` : '/productos';
+            const metodo = editandoId ? 'PUT' : 'POST';
+
+            try {
+                const respuesta = await fetch(url, {
+                    method: metodo,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datos)
+                });
+
+                if (respuesta.ok) {
+                    alert(editandoId ? "✅ Producto actualizado" : "✅ Producto guardado");
+                    resetearFormulario();
+                    cargarProductos();
+                }
+            } catch (error) {
+                alert("❌ Error en el servidor");
+            }
+        });
+
+        // 5. Eliminar (Versión Única)
+        async function eliminarProducto(id) {
+            if (confirm('¿Estás seguro de eliminar este producto?')) {
+                try {
+                    const respuesta = await fetch(`/productos/${id}`, { method: 'DELETE' });
+                    if (respuesta.ok) {
+                        cargarProductos();
+                    } else {
+                        alert("❌ Error al eliminar");
+                    }
+                } catch (error) {
+                    console.error("Error:", error);
+                }
+            }
+        }
+
+        cargarProductos();
+    </script>
+</body>
+</html>
