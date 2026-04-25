@@ -1,26 +1,39 @@
 const express = require('express');
 const sequelize = require('./config/database');
 const Product = require('./models/Product');
-const Category = require('./models/Category'); // Importación limpia
+const Category = require('./models/Category');
 
-// Definición de Relaciones
-Product.belongsTo(Category);
-Category.hasMany(Product);
+// 1. Verificación de carga (Debug)
+console.log('--- Verificando Modelos ---');
+console.log('Product:', Product ? 'Cargado ✅' : 'ERROR ❌');
+console.log('Category:', Category ? 'Cargado ✅' : 'ERROR ❌');
+
+// 2. Definición de Relaciones (UN SOLA VEZ)
+if (Product && Category) {
+    Product.belongsTo(Category);
+    Category.hasMany(Product);
+    console.log('✅ Relaciones establecidas correctamente.');
+} else {
+    console.error('❌ Error: No se pudieron establecer relaciones porque falta un modelo.');
+    process.exit(1); // Detiene el servidor si los modelos fallan
+}
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
-// Conexión y Sincronización
+// 3. Sincronización con Laragon
 sequelize.sync({ force: false })
     .then(() => {
-        console.log('✅ Conexión exitosa a Laragon y tabla sincronizada.');
+        console.log('✅ Base de datos sincronizada en Laragon.');
     })
     .catch(err => {
-        console.error('❌ Error al conectar con la base de datos:', err);
+        console.error('❌ Error de sincronización:', err);
     });
 
-// 1. LEER (GET)
+// --- RUTAS API ---
+
+// LEER (GET)
 app.get('/productos', async (req, res) => {
     try {
         const productos = await Product.findAll({ include: Category }); 
@@ -30,7 +43,7 @@ app.get('/productos', async (req, res) => {
     }
 });
 
-// 2. CREAR (POST) - CORREGIDO
+// CREAR PRODUCTO (POST)
 app.post('/productos', async (req, res) => {
     try {
         const nuevoProducto = await Product.create(req.body);
@@ -39,13 +52,22 @@ app.post('/productos', async (req, res) => {
             dato: nuevoProducto
         });
     } catch (error) {
-        // Mapea los mensajes de validación definidos en tu modelo Product.js
         const mensajes = error.errors ? error.errors.map(e => e.message) : 'Error interno';
         res.status(400).json({ error: mensajes });
-    } // <--- Faltaba esta llave
-}); // <--- Faltaba este paréntesis
+    }
+});
 
-// 3. ACTUALIZAR (PUT)
+// CREAR CATEGORÍA (POST)
+app.post('/categorias', async (req, res) => {
+    try {
+        const categoria = await Category.create(req.body);
+        res.json({ mensaje: '✅ Categoría creada', dato: categoria });
+    } catch (error) {
+        res.status(400).json({ error: 'Error al crear categoría' });
+    }
+});
+
+// ACTUALIZAR (PUT)
 app.put('/productos/:id', async (req, res) => {
     try {
         const product = await Product.findByPk(req.params.id);
@@ -56,35 +78,25 @@ app.put('/productos/:id', async (req, res) => {
             res.status(404).json({ error: "Producto no encontrado" });
         }
     } catch (error) {
-        res.status(400).json({ error: "Error al actualizar los datos" });
+        res.status(400).json({ error: "Error al actualizar" });
     }
 });
 
-// 4. ELIMINAR (DELETE)
+// ELIMINAR (DELETE)
 app.delete('/productos/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const eliminado = await Product.destroy({ where: { id: id } });
+        const eliminado = await Product.destroy({ where: { id: req.params.id } });
         if (eliminado) {
-            res.json({ mensaje: '✅ Producto eliminado correctamente' });
+            res.json({ mensaje: '✅ Producto eliminado' });
         } else {
-            res.status(404).json({ error: 'Producto no encontrado' });
+            res.status(404).json({ error: 'No encontrado' });
         }
     } catch (error) {
-        res.status(500).json({ error: 'Error al eliminar el producto' });
-    }
-});
-// Ruta temporal para crear categorías rápido
-app.post('/categorias', async (req, res) => {
-    try {
-        const categoria = await Category.create(req.body);
-        res.json(categoria);
-    } catch (error) {
-        res.status(400).json({ error: 'Error al crear categoría' });
+        res.status(500).json({ error: 'Error al eliminar' });
     }
 });
 
 const PORT = 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`🚀 Servidor en http://localhost:${PORT}`);
 });
