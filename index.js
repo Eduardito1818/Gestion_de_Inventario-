@@ -1,12 +1,17 @@
 const express = require('express');
 const sequelize = require('./config/database');
 const Product = require('./models/Product');
+const Category = require('./models/Category'); // Importación limpia
+
+// Definición de Relaciones
+Product.belongsTo(Category);
+Category.hasMany(Product);
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
-// Conexión y Sincronización con Laragon
+// Conexión y Sincronización
 sequelize.sync({ force: false })
     .then(() => {
         console.log('✅ Conexión exitosa a Laragon y tabla sincronizada.');
@@ -15,17 +20,17 @@ sequelize.sync({ force: false })
         console.error('❌ Error al conectar con la base de datos:', err);
     });
 
-// 1. LEER (GET): Obtener todos los productos
+// 1. LEER (GET)
 app.get('/productos', async (req, res) => {
     try {
-        const productos = await Product.findAll();
+        const productos = await Product.findAll({ include: Category }); 
         res.json(productos);
     } catch (error) {
         res.status(500).json({ error: 'Error al obtener productos' });
     }
 });
 
-// 2. CREAR (POST): Registrar un producto nuevo
+// 2. CREAR (POST) - CORREGIDO
 app.post('/productos', async (req, res) => {
     try {
         const nuevoProducto = await Product.create(req.body);
@@ -34,18 +39,17 @@ app.post('/productos', async (req, res) => {
             dato: nuevoProducto
         });
     } catch (error) {
-        res.status(400).json({ error: 'No se pudo guardar. Revisa los datos.' });
-    }
-});
+        // Mapea los mensajes de validación definidos en tu modelo Product.js
+        const mensajes = error.errors ? error.errors.map(e => e.message) : 'Error interno';
+        res.status(400).json({ error: mensajes });
+    } // <--- Faltaba esta llave
+}); // <--- Faltaba este paréntesis
 
-// 3. ACTUALIZAR (PUT): Modificar un producto por ID
+// 3. ACTUALIZAR (PUT)
 app.put('/productos/:id', async (req, res) => {
     try {
-        // Buscamos primero por la Llave Primaria (ID)
         const product = await Product.findByPk(req.params.id);
-        
         if (product) {
-            // Si existe, actualizamos con los datos que vienen en el Body
             await product.update(req.body);
             res.json({ mensaje: "✅ Actualizado con éxito" });
         } else {
@@ -56,12 +60,11 @@ app.put('/productos/:id', async (req, res) => {
     }
 });
 
-// 4. ELIMINAR (DELETE): Borrar un registro por ID
+// 4. ELIMINAR (DELETE)
 app.delete('/productos/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const eliminado = await Product.destroy({ where: { id: id } });
-        
         if (eliminado) {
             res.json({ mensaje: '✅ Producto eliminado correctamente' });
         } else {
@@ -69,6 +72,15 @@ app.delete('/productos/:id', async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ error: 'Error al eliminar el producto' });
+    }
+});
+// Ruta temporal para crear categorías rápido
+app.post('/categorias', async (req, res) => {
+    try {
+        const categoria = await Category.create(req.body);
+        res.json(categoria);
+    } catch (error) {
+        res.status(400).json({ error: 'Error al crear categoría' });
     }
 });
 
